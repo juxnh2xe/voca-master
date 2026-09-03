@@ -1,5 +1,5 @@
-import React from 'react';
-import { Home, BookOpen, CheckCircle2, FolderCog, BarChart3 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Home, BookOpen, CheckCircle2, FolderCog, BarChart3, RefreshCw } from 'lucide-react';
 
 export type ActiveTab = 'home' | 'study' | 'quiz' | 'manage' | 'dashboard';
 
@@ -7,13 +7,27 @@ interface NavbarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   dueTodayCount: number;
+  onSync?: () => Promise<any> | void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   dueTodayCount,
+  onSync,
 }) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncClick = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      if (onSync) await onSync();
+    } finally {
+      setTimeout(() => setIsSyncing(false), 700);
+    }
+  };
+
   const navItems = [
     {
       id: 'home' as ActiveTab,
@@ -66,35 +80,51 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
 
-          {/* 5대 메인 메뉴 */}
-          <nav className="flex items-center gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-700 shadow-2xs font-bold'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-500'}`} />
-                  <span>{item.label}</span>
-                  {item.badge !== null && item.badge !== undefined && (
-                    <span className="px-1.5 py-0.2 rounded-full text-xs font-bold bg-rose-500 text-white">
-                      {item.badge}
-                    </span>
-                  )}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-2.5 right-2.5 h-0.5 bg-indigo-600 rounded-full" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+          {/* 5대 메인 메뉴 + 클라우드 동기화 버튼 */}
+          <div className="flex items-center gap-2">
+            <nav className="flex items-center gap-1">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+                      isActive
+                        ? 'bg-indigo-50 text-indigo-700 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-500'}`} />
+                    <span>{item.label}</span>
+                    {item.badge !== null && item.badge !== undefined && (
+                      <span className="px-1.5 py-0.2 rounded-full text-xs font-bold bg-rose-500 text-white">
+                        {item.badge}
+                      </span>
+                    )}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-2.5 right-2.5 h-0.5 bg-indigo-600 rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* 클라우드 동기화 버튼 */}
+            {onSync && (
+              <button
+                onClick={handleSyncClick}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all ml-1 border border-slate-200/80"
+                title="클라우드 실시간 동기화"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-400'}`} />
+                <span className="hidden md:inline text-[11px] font-medium text-slate-600">
+                  {isSyncing ? '동기화 중...' : '클라우드 동기화'}
+                </span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 모바일 화면 (< sm): 상단 로고 행 + 하단 5분할 네비게이션 그리드 */}
@@ -113,14 +143,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </div>
 
-            {dueTodayCount > 0 && (
-              <span
-                onClick={() => setActiveTab('study')}
-                className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-600 border border-rose-200 cursor-pointer"
-              >
-                오늘 복습 {dueTodayCount}개
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {/* 모바일 클라우드 수동 동기화 아이콘 */}
+              {onSync && (
+                <button
+                  onClick={handleSyncClick}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 bg-slate-100 active:scale-95 transition-all"
+                  title="클라우드 동기화"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : ''}`} />
+                </button>
+              )}
+
+              {dueTodayCount > 0 && (
+                <span
+                  onClick={() => setActiveTab('study')}
+                  className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-600 border border-rose-200 cursor-pointer"
+                >
+                  오늘 복습 {dueTodayCount}개
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 5분할 탭: 모바일에서도 1줄에 5개 메뉴가 완벽하게 정돈 */}

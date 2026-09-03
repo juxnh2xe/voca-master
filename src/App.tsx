@@ -5,7 +5,7 @@ import { Award, RotateCcw, BookOpen, Layers, PlusCircle, Sparkles, CheckCircle2,
 import { useWords } from './hooks/useWords';
 import { useFolders } from './hooks/useFolders';
 import { cleanSampleDataIfPresent } from './db';
-import { syncFromCloud } from './services/supabase';
+import { syncFromCloud, initRealtimeSubscription } from './services/supabase';
 import { Word, TabType } from './types/voca';
 import { EvaluationType, isDueToday } from './services/srs';
 
@@ -79,10 +79,28 @@ export const App: React.FC = () => {
     deleteFolder,
   } = useFolders();
 
-  // 기존 샘플/예시 데이터 제거 및 Supabase 클라우드 동기화
+  // 기존 샘플 데이터 정리 및 Supabase 실시간 양방향 클라우드 동기화
   useEffect(() => {
     cleanSampleDataIfPresent();
     syncFromCloud();
+
+    // 1. Supabase 실시간 변경 감지 (노트북/스마트폰 간 실시간 변경사항 즉시 동기화)
+    const unsubscribe = initRealtimeSubscription(() => {
+      syncFromCloud();
+    });
+
+    // 2. 화면 활성화 시 (스마트폰 잠금 해제 또는 브라우저 탭 복귀) 최신 데이터 자동 재동기화
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncFromCloud();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   // 오늘 복습 대상 단어 수
@@ -210,6 +228,7 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         dueTodayCount={dueTodayCount}
+        onSync={syncFromCloud}
       />
 
       {/* 폴더 빵부스러기(Breadcrumb) 경로: 홈 화면이 아닐 때만 노출 */}
