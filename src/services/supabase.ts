@@ -148,6 +148,19 @@ export const deleteWordFromCloud = async (wordId: string) => {
 };
 
 /**
+ * Supabase에서 복수 단어 일괄 삭제
+ */
+export const deleteMultipleWordsFromCloud = async (wordIds: string[]) => {
+  if (!wordIds || wordIds.length === 0) return;
+  try {
+    const { error } = await supabase.from('words').delete().in('id', wordIds);
+    if (error) console.error('Supabase 일괄 단어 삭제 실패:', error.message);
+  } catch (err) {
+    console.error('Supabase 일괄 단어 삭제 네트워크 에러:', err);
+  }
+};
+
+/**
  * 폴더를 Supabase에 저장/수정
  */
 export const saveFolderToCloud = async (folder: Folder) => {

@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { Word, TabType } from '../types/voca';
 import { isDueToday, calculateSrsUpdate, EvaluationType } from '../services/srs';
-import { saveWordToCloud, saveMultipleWordsToCloud, deleteWordFromCloud } from '../services/supabase';
+import { saveWordToCloud, saveMultipleWordsToCloud, deleteWordFromCloud, deleteMultipleWordsFromCloud } from '../services/supabase';
 
 export const useWords = () => {
   const allWords = useLiveQuery(() => db.words.toArray(), []) || [];
@@ -120,6 +120,12 @@ export const useWords = () => {
     deleteWordFromCloud(id);
   };
 
+  const deleteMultipleWords = async (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    await db.words.bulkDelete(ids);
+    deleteMultipleWordsFromCloud(ids);
+  };
+
   const recordEvaluation = async (wordId: string, evaluation: EvaluationType) => {
     const word = await db.words.get(wordId);
     if (!word) return;
@@ -145,6 +151,7 @@ export const useWords = () => {
     addMultipleWords,
     updateWord,
     deleteWord,
+    deleteMultipleWords,
     recordEvaluation,
   };
 };

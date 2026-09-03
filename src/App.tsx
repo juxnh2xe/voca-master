@@ -67,6 +67,7 @@ export const App: React.FC = () => {
     addMultipleWords,
     updateWord,
     deleteWord,
+    deleteMultipleWords,
     recordEvaluation,
   } = useWords();
 
@@ -437,6 +438,7 @@ export const App: React.FC = () => {
                 folders={folders}
                 onUpdateWord={updateWord}
                 onDeleteWord={deleteWord}
+                onDeleteMultipleWords={deleteMultipleWords}
               />
             )}
 
