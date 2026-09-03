@@ -47,6 +47,7 @@ export const App: React.FC = () => {
 
   // 단어 번호 범위 필터 (#01 ~ #20 등)
   const [selectedRange, setSelectedRange] = useState<string | null>(null);
+  const [quizRange, setQuizRange] = useState<string | null>(null);
 
   // 암기 학습 세션 상태 (무한 사이클 재복습)
   const [sessionWords, setSessionWords] = useState<Word[]>([]);
@@ -62,6 +63,8 @@ export const App: React.FC = () => {
     sortWordsByCluster,
     filterWords,
     getAvailableRanges,
+    getAvailableSetRanges,
+    getIndividualSets,
     filterByRange,
     addWord,
     addMultipleWords,
@@ -216,10 +219,12 @@ export const App: React.FC = () => {
   // 빵부스러기 경로
   const breadcrumbs = getBreadcrumbs(currentFolderId);
 
-  // 사용 가능한 20단어 범위 목록
-  const availableRanges = getAvailableRanges(
-    currentFolderId ? allWords.filter((w) => w.folderId === currentFolderId) : allWords
-  );
+  // 사용 가능한 세트 묶음 범위 및 개별 세트 목록
+  const currentFolderWords = currentFolderId
+    ? allWords.filter((w) => w.folderId === currentFolderId)
+    : allWords;
+  const availableSetGroups = getAvailableSetRanges(currentFolderWords);
+  const availableIndividualSets = getIndividualSets(currentFolderWords);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col antialiased">
@@ -288,12 +293,16 @@ export const App: React.FC = () => {
                 </button>
               </div>
             ) : !isStudying ? (
-              /* 1. 학습 시작 전 설정 화면 (단어장 선택, 20단어 단위 범위 선택) */
+              /* 1. 학습 시작 전 설정 화면 (단어장 선택, 세트 단위 범위 선택) */
               <StudySetup
                 folders={folders}
                 selectedFolderId={currentFolderId}
-                onSelectFolder={(fId) => setCurrentFolderId(fId)}
-                ranges={availableRanges}
+                onSelectFolder={(fId) => {
+                  setCurrentFolderId(fId);
+                  setSelectedRange(null);
+                }}
+                setGroups={availableSetGroups}
+                individualSets={availableIndividualSets}
                 selectedRange={selectedRange}
                 onSelectRange={(range) => setSelectedRange(range)}
                 targetWordCount={targetWordsForSetup}
@@ -329,16 +338,24 @@ export const App: React.FC = () => {
                 </div>
               </div>
             ) : (
-              /* 3. 학습 진행 화면: 오직 카드와 상단 심플 컨트롤만 표시 (집중 모드) */
+              /* 3. 집중 암기 카드 뷰 */
               <div className="space-y-4">
-                <div className="max-w-lg mx-auto flex items-center justify-between px-1">
-                  <button
-                    onClick={() => setIsStudying(false)}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 font-medium py-1 px-2 rounded-lg hover:bg-slate-100 transition-colors"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>범위 설정으로</span>
-                  </button>
+                <div className="max-w-xl mx-auto flex items-center justify-between px-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsStudying(false)}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 font-medium py-1 px-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>범위 설정으로</span>
+                    </button>
+
+                    {selectedRange && (
+                      <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg">
+                        {selectedRange}
+                      </span>
+                    )}
+                  </div>
 
                   {currentCycle > 1 && (
                     <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">
@@ -391,13 +408,41 @@ export const App: React.FC = () => {
               </button>
             </div>
 
+            {/* 퀴즈 세트 범위 선택 */}
+            {availableSetGroups.length > 0 && (
+              <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-600">
+                <span>퀴즈 세트 범위:</span>
+                <select
+                  value={quizRange || ''}
+                  onChange={(e) => setQuizRange(e.target.value || null)}
+                  className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                >
+                  <option value="">전체 세트 ({currentFolderWords.length}단어)</option>
+                  <optgroup label="5세트 묶음">
+                    {availableSetGroups.map((g) => (
+                      <option key={g.label} value={g.label}>
+                        {g.label} ({g.count}단어)
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="개별 세트">
+                    {availableIndividualSets.map((s) => (
+                      <option key={s.setId} value={s.setId}>
+                        {s.setId} {s.setName ? `- ${s.setName}` : ''} ({s.count}단어)
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+            )}
+
             {quizMode === 'multiple' ? (
               <FourChoiceQuiz
-                words={currentFolderId ? allWords.filter((w) => w.folderId === currentFolderId) : allWords}
+                words={quizRange ? filterByRange(currentFolderWords, quizRange) : currentFolderWords}
               />
             ) : (
               <CsatExam
-                words={currentFolderId ? allWords.filter((w) => w.folderId === currentFolderId) : allWords}
+                words={quizRange ? filterByRange(currentFolderWords, quizRange) : currentFolderWords}
               />
             )}
           </div>

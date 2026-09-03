@@ -4,6 +4,30 @@ import { Word, TabType } from '../types/voca';
 import { isDueToday, calculateSrsUpdate, EvaluationType } from '../services/srs';
 import { saveWordToCloud, saveMultipleWordsToCloud, deleteWordFromCloud, deleteMultipleWordsFromCloud } from '../services/supabase';
 
+export interface SetRangeGroup {
+  label: string; // "#001 ~ #005"
+  startNum: number;
+  endNum: number;
+  count: number;
+}
+
+export interface SingleSetItem {
+  setId: string;
+  setName?: string;
+  num: number;
+  count: number;
+}
+
+export const parseSetNum = (setId?: string): number | null => {
+  if (!setId) return null;
+  const m = setId.match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+};
+
+export const formatSetId = (num: number): string => {
+  return `#${String(num).padStart(3, '0')}`;
+};
+
 export const useWords = () => {
   const allWords = useLiveQuery(() => db.words.toArray(), []) || [];
 
@@ -15,8 +39,8 @@ export const useWords = () => {
         if (a.setId !== b.setId) return a.setId.localeCompare(b.setId);
         return (a.orderInSet || 0) - (b.orderInSet || 0);
       }
-      if (a.setId && !b.setId) return -1;
-      if (!a.setId && b.setId) return 1;
+      if (a.setId) return -1;
+      if (b.setId) return 1;
       // 2순위: 생성일 역순
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
@@ -74,8 +98,76 @@ export const useWords = () => {
     return sortWordsByCluster(list);
   };
 
-  // 3. 단어 번호 범위 필터 (#01 ~ #20 등)
+  // 3-1. 세트 번호 5개 단위 묶음 범위 목록 (#001 ~ #005, #006 ~ #010 등)
+  const getAvailableSetRanges = (words: Word[], step: number = 5): SetRangeGroup[] => {
+    const nums: number[] = [];
+    words.forEach((w) => {
+      const n = parseSetNum(w.setId);
+      if (n !== null) nums.push(n);
+    });
+
+    if (nums.length === 0) return [];
+
+    const minNum = Math.min(...nums);
+    const maxNum = Math.max(...nums);
+
+    const groups: SetRangeGroup[] = [];
+    const firstBlockStart = Math.floor((minNum - 1) / step) * step + 1;
+
+    for (let start = firstBlockStart; start <= maxNum; start += step) {
+      const end = start + step - 1;
+      const count = words.filter((w) => {
+        const n = parseSetNum(w.setId);
+        return n !== null && n >= start && n <= end;
+      }).length;
+
+      if (count > 0) {
+        groups.push({
+          label: `${formatSetId(start)} ~ ${formatSetId(end)}`,
+          startNum: start,
+          endNum: end,
+          count,
+        });
+      }
+    }
+
+    return groups;
+  };
+
+  // 3-2. 등록된 개별 세트 목록
+  const getIndividualSets = (words: Word[]): SingleSetItem[] => {
+    const map = new Map<string, { setName?: string; count: number; num: number }>();
+
+    words.forEach((w) => {
+      if (!w.setId) return;
+      const id = w.setId.trim();
+      const num = parseSetNum(id) || 0;
+      const existing = map.get(id);
+      if (existing) {
+        existing.count += 1;
+        if (!existing.setName && w.setName) existing.setName = w.setName;
+      } else {
+        map.set(id, { setName: w.setName, count: 1, num });
+      }
+    });
+
+    return Array.from(map.entries())
+      .map(([setId, info]) => ({
+        setId,
+        setName: info.setName,
+        num: info.num,
+        count: info.count,
+      }))
+      .sort((a, b) => a.num - b.num);
+  };
+
+  // 3-3. 세트 범위 또는 20단어 단위 목록 반환
   const getAvailableRanges = (words: Word[]): string[] => {
+    const setGroups = getAvailableSetRanges(words);
+    if (setGroups.length > 0) {
+      return setGroups.map((g) => g.label);
+    }
+
     const total = words.length;
     if (total === 0) return [];
 
@@ -89,12 +181,44 @@ export const useWords = () => {
     return ranges;
   };
 
+  // 3-4. 세트 범위 또는 단어 인덱스 범위로 필터링
   const filterByRange = (words: Word[], rangeLabel: string): Word[] => {
-    const match = rangeLabel.match(/#(\d+)\s*~\s*#(\d+)/);
-    if (!match) return words;
-    const startIdx = parseInt(match[1], 10) - 1;
-    const endIdx = parseInt(match[2], 10);
-    return words.slice(startIdx, endIdx);
+    if (!rangeLabel || rangeLabel === '전체') return words;
+
+    // 1) 범위 형태 매칭: "#001 ~ #005"
+    const rangeMatch = rangeLabel.match(/#?(\d+)\s*~\s*#?(\d+)/);
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1], 10);
+      const end = parseInt(rangeMatch[2], 10);
+
+      // 세트 번호 기반 필터
+      const hasSetIds = words.some((w) => !!w.setId);
+      if (hasSetIds) {
+        const filtered = words.filter((w) => {
+          const n = parseSetNum(w.setId);
+          return n !== null && n >= start && n <= end;
+        });
+        if (filtered.length > 0) return filtered;
+      }
+
+      // 세트 번호가 없거나 매칭되지 않는 경우 단어 인덱스 슬라이싱 (1-indexed)
+      const startIdx = Math.max(0, start - 1);
+      const endIdx = end;
+      return words.slice(startIdx, endIdx);
+    }
+
+    // 2) 단일 세트 매칭: "#001"
+    const singleMatch = rangeLabel.match(/#?(\d+)/);
+    if (singleMatch) {
+      const targetNum = parseInt(singleMatch[1], 10);
+      const filtered = words.filter((w) => {
+        const n = parseSetNum(w.setId);
+        return n === targetNum || w.setId === rangeLabel;
+      });
+      if (filtered.length > 0) return filtered;
+    }
+
+    return words;
   };
 
   // 4. CRUD & 평가
@@ -146,6 +270,8 @@ export const useWords = () => {
     sortWordsByCluster,
     filterWords,
     getAvailableRanges,
+    getAvailableSetRanges,
+    getIndividualSets,
     filterByRange,
     addWord,
     addMultipleWords,
