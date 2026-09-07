@@ -26,10 +26,11 @@ import { StatsDashboard } from './components/dashboard/StatsDashboard';
 import { HomeScreen } from './components/home/HomeScreen';
 import { useAuth } from './hooks/useAuth';
 import { AuthModal } from './components/auth/AuthModal';
+import { AuthScreen } from './components/auth/AuthScreen';
 
 export const App: React.FC = () => {
   // 사용자 인증 (이메일/비밀번호) 상태
-  const { user, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // 메인 탭: 'home' (홈 화면), 'study' (단어 암기), 'quiz' (퀴즈), 'manage' (단어 관리), 'dashboard' (대시보드)
@@ -232,6 +233,21 @@ export const App: React.FC = () => {
     : allWords;
   const availableSetGroups = getAvailableSetRanges(currentFolderWords);
   const availableIndividualSets = getIndividualSets(currentFolderWords);
+
+  // 1. 인증 초기화 대기 화면
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-xs font-bold text-slate-400 tracking-wide">VocaMaster 로딩 중...</p>
+      </div>
+    );
+  }
+
+  // 2. 회원가입/로그인이 이루어져야만 본 화면으로 진입 가능 (로그인 필수 차단벽)
+  if (!user) {
+    return <AuthScreen onSuccess={() => syncFromCloud()} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col antialiased">
