@@ -24,8 +24,14 @@ import { WordList } from './components/words/WordList';
 import { FolderManager } from './components/folders/FolderManager';
 import { StatsDashboard } from './components/dashboard/StatsDashboard';
 import { HomeScreen } from './components/home/HomeScreen';
+import { useAuth } from './hooks/useAuth';
+import { AuthModal } from './components/auth/AuthModal';
 
 export const App: React.FC = () => {
+  // 사용자 인증 (이메일/비밀번호) 상태
+  const { user, signOut } = useAuth();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
   // 메인 탭: 'home' (홈 화면), 'study' (단어 암기), 'quiz' (퀴즈), 'manage' (단어 관리), 'dashboard' (대시보드)
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
 
@@ -106,6 +112,11 @@ export const App: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
+
+  // 로그인/로그아웃 시 사용자 전용 클라우드 단어장 자동 동기화
+  useEffect(() => {
+    syncFromCloud();
+  }, [user?.id]);
 
   // 오늘 복습 대상 단어 수
   const dueTodayCount = allWords.filter(
@@ -235,6 +246,16 @@ export const App: React.FC = () => {
         setActiveTab={setActiveTab}
         dueTodayCount={dueTodayCount}
         onSync={syncFromCloud}
+        user={user}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onSignOut={signOut}
+      />
+
+      {/* 로그인 및 회원가입 모달 */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={() => syncFromCloud()}
       />
 
       {/* 폴더 빵부스러기(Breadcrumb) 경로: 홈 화면이 아닐 때만 노출 */}

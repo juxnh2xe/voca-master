@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, BookOpen, CheckCircle2, FolderCog, BarChart3, RefreshCw } from 'lucide-react';
+import { Home, BookOpen, CheckCircle2, FolderCog, BarChart3, RefreshCw, LogIn, LogOut, User as UserIcon } from 'lucide-react';
 
 export type ActiveTab = 'home' | 'study' | 'quiz' | 'manage' | 'dashboard';
 
@@ -8,6 +8,9 @@ interface NavbarProps {
   setActiveTab: (tab: ActiveTab) => void;
   dueTodayCount: number;
   onSync?: () => Promise<any> | void;
+  user?: any;
+  onOpenAuthModal: () => void;
+  onSignOut: () => Promise<void>;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -15,6 +18,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   dueTodayCount,
   onSync,
+  user,
+  onOpenAuthModal,
+  onSignOut,
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -80,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
 
-          {/* 5대 메인 메뉴 + 클라우드 동기화 버튼 */}
+          {/* 5대 메인 메뉴 + 클라우드 동기화 + 계정(로그인/로그아웃) */}
           <div className="flex items-center gap-2">
             <nav className="flex items-center gap-1">
               {navItems.map((item) => {
@@ -115,15 +121,45 @@ export const Navbar: React.FC<NavbarProps> = ({
             {onSync && (
               <button
                 onClick={handleSyncClick}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all ml-1 border border-slate-200/80"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all ml-1 border border-slate-200/80 cursor-pointer"
                 title="클라우드 실시간 동기화"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-400'}`} />
                 <span className="hidden md:inline text-[11px] font-medium text-slate-600">
-                  {isSyncing ? '동기화 중...' : '클라우드 동기화'}
+                  {isSyncing ? '동기화 중...' : '동기화'}
                 </span>
               </button>
             )}
+
+            {/* 사용자 인증 (로그인 상태 or 로그인 버튼) */}
+            <div className="pl-1 border-l border-slate-200 ml-1 flex items-center">
+              {user ? (
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold max-w-[120px] truncate"
+                    title={user.email}
+                  >
+                    <UserIcon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span className="truncate">{user.email?.split('@')[0]}</span>
+                  </div>
+                  <button
+                    onClick={onSignOut}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    title="로그아웃"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={onOpenAuthModal}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>로그인</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -143,7 +179,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {/* 모바일 클라우드 수동 동기화 아이콘 */}
               {onSync && (
                 <button
@@ -160,8 +196,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={() => setActiveTab('study')}
                   className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-600 border border-rose-200 cursor-pointer"
                 >
-                  오늘 복습 {dueTodayCount}개
+                  오늘 {dueTodayCount}
                 </span>
+              )}
+
+              {/* 모바일 인증 (로그인/로그아웃) */}
+              {user ? (
+                <button
+                  onClick={onSignOut}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 bg-slate-100 active:scale-95 transition-all"
+                  title={`${user.email} (로그아웃)`}
+                >
+                  <LogOut className="w-3.5 h-3.5 text-slate-600" />
+                </button>
+              ) : (
+                <button
+                  onClick={onOpenAuthModal}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-indigo-600 text-white text-[11px] font-bold shadow-2xs active:scale-95 cursor-pointer"
+                >
+                  <LogIn className="w-3 h-3" />
+                  <span>로그인</span>
+                </button>
               )}
             </div>
           </div>

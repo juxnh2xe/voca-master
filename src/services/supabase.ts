@@ -235,3 +235,17 @@ export const resetAllStudyProgressInCloud = async () => {
   }
 };
 
+/**
+ * 로그아웃 또는 계정 전환 시 로컬 IndexedDB 캐시 비우기
+ */
+export const clearLocalData = async () => {
+  try {
+    await db.words.clear();
+    await db.folders.clear();
+    console.log('[Auth] 로컬 데이터 캐시 정리 완료');
+  } catch (err) {
+    console.error('로컬 데이터 초기화 에러:', err);
+  }
+};
+
+
