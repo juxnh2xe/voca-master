@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, LogIn, UserPlus, Sparkles, BookOpen, AlertCircle, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, LogIn, UserPlus, Sparkles, BookOpen, AlertCircle, CheckCircle2, Loader2, ShieldCheck, KeyRound } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 interface AuthScreenProps {
@@ -14,6 +14,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [accessKey, setAccessKey] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -34,9 +35,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
       return;
     }
 
-    if (mode === 'signup' && password !== confirmPassword) {
-      setErrorMessage('비밀번호가 서로 일치하지 않습니다.');
-      return;
+    if (mode === 'signup') {
+      if (password !== confirmPassword) {
+        setErrorMessage('비밀번호가 서로 일치하지 않습니다.');
+        return;
+      }
+      if (accessKey.trim() !== 'juxnh2xe1004') {
+        setErrorMessage('가입 인증 키가 올바르지 않습니다. 승인된 가입 키를 입력해 주세요.');
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -205,20 +212,42 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
             </div>
 
             {mode === 'signup' && (
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">비밀번호 확인</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="password"
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="비밀번호 다시 입력"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden transition-all"
-                  />
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">비밀번호 확인</label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="비밀번호 다시 입력"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden transition-all"
+                    />
+                  </div>
                 </div>
-              </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700">가입 인증 키</label>
+                    <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                      인증 키 필수
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="password"
+                      required
+                      value={accessKey}
+                      onChange={(e) => setAccessKey(e.target.value)}
+                      placeholder="발급받은 가입 키 입력"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden transition-all"
+                    />
+                  </div>
+                </div>
+              </>
             )}
 
             <button
