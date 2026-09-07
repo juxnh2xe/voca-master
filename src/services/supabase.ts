@@ -71,23 +71,27 @@ export const syncFromCloud = async (userId?: string): Promise<{ wordsCount: numb
     const { data: cloudFolders, error: folderErr } = await supabase.from('folders').select('*');
     if (folderErr) throw folderErr;
 
+    const cloudFolderIds = new Set((cloudFolders || []).map((f: any) => f.id));
     const localFolders = await db.folders.toArray();
+    const staleFolderIds = localFolders.filter((f) => !cloudFolderIds.has(f.id)).map((f) => f.id);
+    if (staleFolderIds.length > 0) {
+      await db.folders.bulkDelete(staleFolderIds);
+    }
     if (cloudFolders && cloudFolders.length > 0) {
       const convertedFolders = cloudFolders.map(rowToFolder);
       await db.folders.bulkPut(convertedFolders);
-    }
-    // 로컬에만 있고 클라우드에 아직 없는 폴더가 있다면 즉시 클라우드로 업로드
-    if (localFolders.length > 0) {
-      const cloudFolderIds = new Set((cloudFolders || []).map((f: any) => f.id));
-      const foldersToUpload = localFolders.filter((f) => !cloudFolderIds.has(f.id));
-      if (foldersToUpload.length > 0) {
-        await supabase.from('folders').upsert(foldersToUpload.map(folderToRow));
-      }
     }
 
     // 2. Supabase 공용 단어 동기화
     const { data: cloudWords, error: wordErr } = await supabase.from('words').select('*');
     if (wordErr) throw wordErr;
+
+    const cloudWordIds = new Set((cloudWords || []).map((w: any) => w.id));
+    const localWords = await db.words.toArray();
+    const staleWordIds = localWords.filter((w) => !cloudWordIds.has(w.id)).map((w) => w.id);
+    if (staleWordIds.length > 0) {
+      await db.words.bulkDelete(staleWordIds);
+    }
 
     // 3. 사용자별 개별 학습 진행도 조회 (로그인된 경우)
     const userProgressMap = new Map<string, any>();
@@ -109,7 +113,6 @@ export const syncFromCloud = async (userId?: string): Promise<{ wordsCount: numb
     }
 
     // 4. 단어와 개인 학습 진행도 병합 (Merge)
-    const localWords = await db.words.toArray();
     const localWordMap = new Map(localWords.map((w) => [w.id, w]));
     const today = new Date().toISOString().split('T')[0];
 
@@ -161,15 +164,6 @@ export const syncFromCloud = async (userId?: string): Promise<{ wordsCount: numb
 
     if (convertedWords.length > 0) {
       await db.words.bulkPut(convertedWords);
-    }
-
-    // 로컬에만 있고 클라우드에 아직 없는 단어가 있다면 클라우드에 업로드
-    if (localWords.length > 0) {
-      const cloudWordIds = new Set((cloudWords || []).map((w: any) => w.id));
-      const wordsToUpload = localWords.filter((w) => !cloudWordIds.has(w.id));
-      if (wordsToUpload.length > 0) {
-        await supabase.from('words').upsert(wordsToUpload.map(wordToRow));
-      }
     }
 
     console.log(`[Supabase Sync] 동기화 성공: 공용 단어 ${convertedWords.length}개, 개인 학습 기록 ${userProgressMap.size}개`);
