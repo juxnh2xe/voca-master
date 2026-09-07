@@ -3,11 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="theme-color" content="#4f46e5" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="VocaMaster" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VocaMaster - 단어 암기 앱</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Service Worker 자동 등록 (PWA & 완전 오프라인 지원)
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => {
+              console.log('[PWA] Service Worker 등록 완료:', reg.scope);
+            })
+            .catch((err) => {
+              console.warn('[PWA] Service Worker 등록 실패:', err);
+            });
+        });
+      }
+    </script>
   </body>
 </html>

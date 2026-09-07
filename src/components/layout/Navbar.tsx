@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, BookOpen, CheckCircle2, FolderCog, BarChart3, RefreshCw, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import { Home, BookOpen, CheckCircle2, FolderCog, BarChart3, RefreshCw, LogIn, LogOut, User as UserIcon, WifiOff } from 'lucide-react';
 
 export type ActiveTab = 'home' | 'study' | 'quiz' | 'manage' | 'dashboard';
 
@@ -11,6 +11,7 @@ interface NavbarProps {
   user?: any;
   onOpenAuthModal: () => void;
   onSignOut: () => Promise<void>;
+  isOnline?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -21,6 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   user,
   onOpenAuthModal,
   onSignOut,
+  isOnline = true,
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -117,12 +119,26 @@ export const Navbar: React.FC<NavbarProps> = ({
               })}
             </nav>
 
+            {/* 오프라인 상태 배지 */}
+            {!isOnline && (
+              <div
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold animate-pulse"
+                title="오프라인 학습 모드: 와이파이 없이도 정상 학습되며 재연결 시 자동 백업됩니다."
+              >
+                <WifiOff className="w-3.5 h-3.5 text-amber-600" />
+                <span className="hidden md:inline">오프라인 모드</span>
+              </div>
+            )}
+
             {/* 클라우드 동기화 버튼 */}
             {onSync && (
               <button
                 onClick={handleSyncClick}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all ml-1 border border-slate-200/80 cursor-pointer"
-                title="클라우드 실시간 동기화"
+                disabled={!isOnline}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-500 transition-all ml-1 border border-slate-200/80 ${
+                  !isOnline ? 'opacity-50 cursor-not-allowed' : 'hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer'
+                }`}
+                title={isOnline ? "클라우드 실시간 동기화" : "오프라인 상태에서는 수동 동기화가 비활성화됩니다"}
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : 'text-slate-400'}`} />
                 <span className="hidden md:inline text-[11px] font-medium text-slate-600">
@@ -180,12 +196,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5">
+              {/* 모바일 오프라인 배지 */}
+              {!isOnline && (
+                <span
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
+                  title="오프라인 모드"
+                >
+                  <WifiOff className="w-3 h-3 text-amber-600" />
+                  <span>오프라인</span>
+                </span>
+              )}
+
               {/* 모바일 클라우드 수동 동기화 아이콘 */}
               {onSync && (
                 <button
                   onClick={handleSyncClick}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 bg-slate-100 active:scale-95 transition-all"
-                  title="클라우드 동기화"
+                  disabled={!isOnline}
+                  className={`p-1.5 rounded-lg text-slate-500 bg-slate-100 transition-all ${
+                    !isOnline ? 'opacity-50 cursor-not-allowed' : 'hover:text-indigo-600 active:scale-95'
+                  }`}
+                  title={isOnline ? "클라우드 동기화" : "오프라인 상태"}
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-600' : ''}`} />
                 </button>

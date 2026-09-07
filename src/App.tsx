@@ -5,7 +5,7 @@ import { Award, RotateCcw, BookOpen, Layers, PlusCircle, Sparkles, CheckCircle2,
 import { useWords } from './hooks/useWords';
 import { useFolders } from './hooks/useFolders';
 import { cleanSampleDataIfPresent } from './db';
-import { syncFromCloud, initRealtimeSubscription } from './services/supabase';
+import { syncFromCloud, initRealtimeSubscription, flushSyncQueue } from './services/supabase';
 import { Word, TabType } from './types/voca';
 import { EvaluationType, isDueToday } from './services/srs';
 
@@ -89,6 +89,33 @@ export const App: React.FC = () => {
     updateFolder,
     deleteFolder,
   } = useFolders();
+
+  // 온라인/오프라인 네트워크 상태 감지
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true);
+      console.log('[Network] 온라인 연결 복구됨 -> 오프라인 학습 진행도 클라우드 자동 동기화');
+      if (user?.id) {
+        await flushSyncQueue(user.id);
+        await syncFromCloud(user.id);
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      console.log('[Network] 오프라인 모드 전환됨 -> 로컬 데이터로 안심 학습 진행');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [user?.id]);
 
   // 기존 샘플 데이터 정리 및 Supabase 실시간 공용 단어 + 개인별 진행도 클라우드 동기화
   useEffect(() => {
@@ -260,6 +287,7 @@ export const App: React.FC = () => {
         user={user}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onSignOut={signOut}
+        isOnline={isOnline}
       />
 
       {/* 로그인 및 회원가입 모달 */}

@@ -67,6 +67,11 @@ export const rowToFolder = (r: any): Folder => ({
  */
 export const syncFromCloud = async (userId?: string): Promise<{ wordsCount: number; foldersCount: number; isSuccess: boolean }> => {
   try {
+    // 0. 미전송 오프라인 학습 기록이 있다면 클라우드로 먼저 업로드하여 덮어쓰기 방지
+    if (userId && typeof navigator !== 'undefined' && navigator.onLine) {
+      await flushSyncQueue(userId);
+    }
+
     // 1. Supabase 공용 폴더 동기화
     const { data: cloudFolders, error: folderErr } = await supabase.from('folders').select('*');
     if (folderErr) throw folderErr;
@@ -201,7 +206,51 @@ export const initRealtimeSubscription = (onSyncNeeded: () => void) => {
 };
 
 /**
- * 사용자별 단어 학습 진행도 저장 (공용 words 테이블은 건드리지 않음)
+ * 오프라인 상태에서 축적된 학습 진행도(syncQueue)를 Supabase에 일괄 전송 (재연결 시 자동 호출)
+ */
+export const flushSyncQueue = async (userId: string) => {
+  try {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const pendingItems = await db.syncQueue.where('userId').equals(userId).toArray();
+    if (!pendingItems || pendingItems.length === 0) return;
+
+    console.log(`[Offline Sync] 대기 중인 학습 진행도 ${pendingItems.length}개 클라우드로 업로드 시작...`);
+
+    // wordId별로 가장 최신 업데이트만 선택하여 중복 전송 방지
+    const latestByWord = new Map<string, typeof pendingItems[0]>();
+    pendingItems.forEach((item) => {
+      latestByWord.set(item.wordId, item);
+    });
+
+    const rows = Array.from(latestByWord.values()).map((item) => ({
+      user_id: item.userId,
+      word_id: item.wordId,
+      srs_level: item.srsUpdate.srsLevel,
+      consecutive_correct: item.srsUpdate.consecutiveCorrect,
+      next_review_date: item.srsUpdate.nextReviewDate,
+      is_weak: item.srsUpdate.isWeak,
+      total_reviews: item.srsUpdate.totalReviews,
+      last_reviewed_at: item.timestamp,
+      updated_at: item.timestamp,
+    }));
+
+    const { error } = await supabase.from('user_word_progress').upsert(rows, { onConflict: 'user_id,word_id' });
+    if (!error) {
+      const idsToDelete = pendingItems.map((item) => item.id!).filter((id): id is number => id !== undefined);
+      if (idsToDelete.length > 0) {
+        await db.syncQueue.bulkDelete(idsToDelete);
+      }
+      console.log(`[Offline Sync] 오프라인 학습 진행도 ${rows.length}개 클라우드 동기화 완료!`);
+    } else {
+      console.warn('[Offline Sync] 클라우드 업로드 실패:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Offline Sync] 플러시 중 네트워크 오류:', err);
+  }
+};
+
+/**
+ * 사용자별 단어 학습 진행도 저장 (오프라인 지원: 오프라인 시 syncQueue에 자동 보관)
  */
 export const saveUserWordProgress = async (
   userId: string,
@@ -214,8 +263,33 @@ export const saveUserWordProgress = async (
     totalReviews: number;
   }
 ) => {
+  const now = new Date().toISOString();
+
+  // 1. 브라우저가 오프라인 상태인 경우 즉시 로컬 큐에 보관
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    try {
+      await db.syncQueue.add({
+        userId,
+        wordId,
+        srsUpdate: {
+          srsLevel: progress.srsLevel,
+          consecutiveCorrect: progress.consecutiveCorrect,
+          nextReviewDate: progress.nextReviewDate,
+          isWeak: progress.isWeak,
+          totalReviews: progress.totalReviews,
+          totalCorrect: 0,
+        },
+        timestamp: now,
+      });
+      console.log(`[Offline Queue] 네트워크 오프라인: 단어(${wordId}) 진행도를 로컬 큐에 안전 보관`);
+    } catch (e) {
+      console.error('로컬 syncQueue 저장 실패:', e);
+    }
+    return;
+  }
+
+  // 2. 온라인 상태인 경우 클라우드로 전송 시도
   try {
-    const now = new Date().toISOString();
     const { error } = await supabase.from('user_word_progress').upsert(
       {
         user_id: userId,
@@ -231,9 +305,41 @@ export const saveUserWordProgress = async (
       { onConflict: 'user_id,word_id' }
     );
 
-    if (error) console.error('사용자 학습 진행도 저장 실패:', error.message);
+    if (error) {
+      console.warn('사용자 학습 진행도 저장 실패 -> 오프라인 큐에 보관:', error.message);
+      await db.syncQueue.add({
+        userId,
+        wordId,
+        srsUpdate: {
+          srsLevel: progress.srsLevel,
+          consecutiveCorrect: progress.consecutiveCorrect,
+          nextReviewDate: progress.nextReviewDate,
+          isWeak: progress.isWeak,
+          totalReviews: progress.totalReviews,
+          totalCorrect: 0,
+        },
+        timestamp: now,
+      });
+    }
   } catch (err) {
-    console.error('사용자 학습 진행도 저장 에러:', err);
+    console.warn('사용자 학습 진행도 네트워크 에러 -> 오프라인 큐에 보관:', err);
+    try {
+      await db.syncQueue.add({
+        userId,
+        wordId,
+        srsUpdate: {
+          srsLevel: progress.srsLevel,
+          consecutiveCorrect: progress.consecutiveCorrect,
+          nextReviewDate: progress.nextReviewDate,
+          isWeak: progress.isWeak,
+          totalReviews: progress.totalReviews,
+          totalCorrect: 0,
+        },
+        timestamp: now,
+      });
+    } catch {
+      // 무시
+    }
   }
 };
 
