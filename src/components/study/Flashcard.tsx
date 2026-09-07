@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp, Check, HelpCircle, RotateCcw, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp, Check, HelpCircle, RotateCcw, Layers, Eye, EyeOff } from 'lucide-react';
 import { Word } from '../../types/voca';
 import { EvaluationType } from '../../services/srs';
 
@@ -57,9 +57,40 @@ export const Flashcard: React.FC<FlashcardProps> = ({
   // 새 단어가 출제될 때마다 항상 영단어만 보이는 상태(커튼 닫힘)로 초기화
   const [isRevealed, setIsRevealed] = useState(false);
 
+  // 예문 한글 해석 열람 여부 개별 상태 관리 (기본값: 모두 숨김)
+  const [revealedTranslationIds, setRevealedTranslationIds] = useState<Set<string | number>>(new Set());
+
   useEffect(() => {
     setIsRevealed(false);
+    setRevealedTranslationIds(new Set());
   }, [word.id]);
+
+  // 개별 예문 한글 해석 토글
+  const toggleTranslation = (id: string | number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setRevealedTranslationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // 모든 예문 한글 해석 일괄 토글
+  const toggleAllTranslations = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!word.examples || word.examples.length === 0) return;
+    const allIds = word.examples.map((ex, idx) => ex.id || idx);
+    const isAllShown = allIds.every((id) => revealedTranslationIds.has(id));
+    if (isAllShown) {
+      setRevealedTranslationIds(new Set());
+    } else {
+      setRevealedTranslationIds(new Set(allIds));
+    }
+  };
 
   // 커튼 열기
   const handleOpenCurtain = () => {
@@ -191,43 +222,109 @@ export const Flashcard: React.FC<FlashcardProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <span>기출 예문 및 해석</span>
+                        <span>기출 예문</span>
                         <span className="text-[11px] text-slate-400 font-normal">
                           ({word.examples.length}개)
                         </span>
                       </span>
-                      <span className="text-[10px] text-slate-400">
-                        자유롭게 스크롤하여 확인하세요
-                      </span>
+
+                      {/* 해석 모두 보기 / 접기 일괄 토글 버튼 */}
+                      {word.examples.some((ex) => !!ex.translation) && (
+                        <button
+                          onClick={toggleAllTranslations}
+                          className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50/90 hover:bg-indigo-100 px-2.5 py-1 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95 border border-indigo-100"
+                          title="모든 예문의 해석을 한 번에 열거나 닫습니다"
+                        >
+                          {word.examples.map((ex, idx) => ex.id || idx).every((id) => revealedTranslationIds.has(id)) ? (
+                            <>
+                              <EyeOff className="w-3 h-3 text-indigo-500" />
+                              <span>해석 모두 접기</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3 h-3 text-indigo-500" />
+                              <span>해석 모두 보기</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
 
-                    {word.examples.map((ex, idx) => (
-                      <div
-                        key={ex.id || idx}
-                        className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black text-indigo-600">
-                            #{idx + 1}
-                          </span>
-                          {ex.year && (
-                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                              {ex.year}
-                            </span>
-                          )}
-                        </div>
+                    {word.examples.map((ex, idx) => {
+                      const isTranslationShown = revealedTranslationIds.has(ex.id || idx);
+                      return (
+                        <div
+                          key={ex.id || idx}
+                          className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-black text-indigo-600">
+                                #{idx + 1}
+                              </span>
+                              {ex.year && (
+                                <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                  {ex.year}
+                                </span>
+                              )}
+                            </div>
 
-                        <p className="text-sm sm:text-base text-slate-800 leading-relaxed font-serif">
-                          {renderHighlightedSentence(ex.sentence, word.word)}
-                        </p>
+                            {/* 개별 예문 해석 토글 버튼 */}
+                            {ex.translation && (
+                              <button
+                                onClick={(e) => toggleTranslation(ex.id || idx, e)}
+                                className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg border transition-all cursor-pointer active:scale-95 ${
+                                  isTranslationShown
+                                    ? 'text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100'
+                                    : 'text-indigo-600 bg-indigo-50/80 border-indigo-200 hover:bg-indigo-100'
+                                }`}
+                              >
+                                {isTranslationShown ? (
+                                  <>
+                                    <EyeOff className="w-3 h-3 text-slate-400" />
+                                    <span>해석 접기</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Eye className="w-3 h-3 text-indigo-500" />
+                                    <span>해석 보기</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
 
-                        {ex.translation && (
-                          <p className="text-xs sm:text-sm text-slate-600 font-sans pt-2 border-t border-slate-100 leading-relaxed">
-                            {ex.translation}
+                          {/* 영어 예문 본문 */}
+                          <p className="text-sm sm:text-base text-slate-800 leading-relaxed font-serif">
+                            {renderHighlightedSentence(ex.sentence, word.word)}
                           </p>
-                        )}
-                      </div>
-                    ))}
+
+                          {/* 한글 해석: 누르면 나타나고 다시 누르면 접힘 */}
+                          <AnimatePresence>
+                            {ex.translation && isTranslationShown && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden"
+                              >
+                                <p
+                                  onClick={(e) => toggleTranslation(ex.id || idx, e)}
+                                  className="text-xs sm:text-sm text-slate-700 font-sans p-3 bg-indigo-50/40 border border-indigo-100/80 rounded-xl leading-relaxed cursor-pointer hover:bg-indigo-50/60 transition-colors"
+                                  title="클릭하면 해석이 다시 접힙니다"
+                                >
+                                  <span className="text-[10px] font-bold text-indigo-600 block mb-0.5">
+                                    한글 해석:
+                                  </span>
+                                  {ex.translation}
+                                </p>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
                   </motion.div>
                 )}
 
