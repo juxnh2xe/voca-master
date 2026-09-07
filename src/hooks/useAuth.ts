@@ -51,6 +51,7 @@ export const useAuth = () => {
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
     await clearLocalData();
+    await syncFromCloud(); // 공용 단어 목록을 깨끗한 0단계로 게스트 로드
     if (error) throw error;
   };
 

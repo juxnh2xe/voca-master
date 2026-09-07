@@ -2,7 +2,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { Word, TabType } from '../types/voca';
 import { isDueToday, calculateSrsUpdate, EvaluationType } from '../services/srs';
-import { saveWordToCloud, saveMultipleWordsToCloud, deleteWordFromCloud, deleteMultipleWordsFromCloud, resetAllStudyProgressInCloud } from '../services/supabase';
+import {
+  saveWordToCloud,
+  saveMultipleWordsToCloud,
+  deleteWordFromCloud,
+  deleteMultipleWordsFromCloud,
+  saveUserWordProgress,
+  resetUserStudyProgress,
+} from '../services/supabase';
 
 export interface SetRangeGroup {
   label: string; // "#001 ~ #005"
@@ -28,7 +35,7 @@ export const formatSetId = (num: number): string => {
   return `#${String(num).padStart(3, '0')}`;
 };
 
-export const useWords = () => {
+export const useWords = (userId?: string) => {
   const allWords = useLiveQuery(() => db.words.toArray(), []) || [];
 
   // 1. 단어 클러스터 정렬 (연관 세트 #001 단어들이 흩어지지 않고 묶음 단위로 연속 배치)
@@ -261,8 +268,11 @@ export const useWords = () => {
       lastReviewedAt: now,
       updatedAt: now,
     });
-    const updated = await db.words.get(wordId);
-    if (updated) saveWordToCloud(updated);
+
+    // 로그인한 회원의 경우: 개인별 학습 진행도 테이블에만 저장 (공용 단어 목록 오염 방지)
+    if (userId) {
+      saveUserWordProgress(userId, wordId, srsUpdate);
+    }
   };
 
   // 5. 단어 데이터는 보존하고 학습 진행 기록만 0으로 초기화
@@ -282,7 +292,11 @@ export const useWords = () => {
       updatedAt: now,
     }));
     await db.words.bulkPut(resetWords);
-    await resetAllStudyProgressInCloud();
+
+    // 로그인한 회원의 경우: 클라우드 개인별 학습 진행도 데이터만 초기화
+    if (userId) {
+      await resetUserStudyProgress(userId);
+    }
   };
 
   return {

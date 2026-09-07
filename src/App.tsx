@@ -79,7 +79,7 @@ export const App: React.FC = () => {
     deleteMultipleWords,
     recordEvaluation,
     resetAllStudyProgress,
-  } = useWords();
+  } = useWords(user?.id);
 
   const {
     folders,
@@ -89,20 +89,20 @@ export const App: React.FC = () => {
     deleteFolder,
   } = useFolders();
 
-  // 기존 샘플 데이터 정리 및 Supabase 실시간 양방향 클라우드 동기화
+  // 기존 샘플 데이터 정리 및 Supabase 실시간 공용 단어 + 개인별 진행도 클라우드 동기화
   useEffect(() => {
     cleanSampleDataIfPresent();
-    syncFromCloud();
+    syncFromCloud(user?.id);
 
     // 1. Supabase 실시간 변경 감지 (노트북/스마트폰 간 실시간 변경사항 즉시 동기화)
     const unsubscribe = initRealtimeSubscription(() => {
-      syncFromCloud();
+      syncFromCloud(user?.id);
     });
 
     // 2. 화면 활성화 시 (스마트폰 잠금 해제 또는 브라우저 탭 복귀) 최신 데이터 자동 재동기화
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        syncFromCloud();
+        syncFromCloud(user?.id);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -111,11 +111,6 @@ export const App: React.FC = () => {
       unsubscribe();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
-
-  // 로그인/로그아웃 시 사용자 전용 클라우드 단어장 자동 동기화
-  useEffect(() => {
-    syncFromCloud();
   }, [user?.id]);
 
   // 오늘 복습 대상 단어 수
@@ -245,7 +240,7 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         dueTodayCount={dueTodayCount}
-        onSync={syncFromCloud}
+        onSync={() => syncFromCloud(user?.id)}
         user={user}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onSignOut={signOut}
@@ -255,7 +250,7 @@ export const App: React.FC = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={() => syncFromCloud()}
+        onSuccess={() => syncFromCloud(user?.id)}
       />
 
       {/* 폴더 빵부스러기(Breadcrumb) 경로: 홈 화면이 아닐 때만 노출 */}

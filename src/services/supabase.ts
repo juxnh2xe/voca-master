@@ -7,9 +7,12 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_BV
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ==================== 데이터 변환 유틸리티 (CamelCase <-> Supabase DB 컬럼 매핑) ====================
+// ==================== 데이터 변환 유틸리티 ====================
 
-// Supabase 테이블 words 스키마에 정확히 존재하는 컬럼들만 전달
+/**
+ * 공용 단어(words) 테이블용 행 변환
+ * (개인별 SRS 학습 진행도는 별도의 user_word_progress에 저장하므로 words 테이블에는 단어 본문만 전달)
+ */
 export const wordToRow = (w: Word) => ({
   id: w.id,
   word: w.word,
@@ -18,12 +21,6 @@ export const wordToRow = (w: Word) => ({
   set_name: w.setName || null,
   folder_id: w.folderId || null,
   examples: w.examples || [],
-  srs_level: w.srsLevel ?? 0,
-  consecutive_correct: w.consecutiveCorrect ?? 0,
-  next_review_date: w.nextReviewDate || null,
-  is_weak: w.isWeak ?? false,
-  total_reviews: w.totalReviews ?? 0,
-  last_reviewed_at: w.lastReviewedAt || null,
   created_at: w.createdAt || new Date().toISOString(),
 });
 
@@ -35,13 +32,14 @@ export const rowToWord = (r: any): Word => ({
   setName: r.set_name || undefined,
   folderId: r.folder_id || null,
   examples: r.examples || [],
-  srsLevel: r.srs_level ?? 0,
-  consecutiveCorrect: r.consecutive_correct ?? 0,
-  nextReviewDate: r.next_review_date || new Date().toISOString().split('T')[0],
-  isWeak: r.is_weak ?? false,
-  totalReviews: r.total_reviews ?? 0,
+  // 기본 SRS 학습 상태 (사용자별 진행도 병합 전 기본값 0)
+  srsLevel: 0,
+  consecutiveCorrect: 0,
+  nextReviewDate: new Date().toISOString().split('T')[0],
+  isWeak: false,
+  totalReviews: 0,
   totalCorrect: 0,
-  lastReviewedAt: r.last_reviewed_at || undefined,
+  lastReviewedAt: undefined,
   createdAt: r.created_at || new Date().toISOString(),
   updatedAt: r.created_at || new Date().toISOString(),
 });
@@ -63,11 +61,13 @@ export const rowToFolder = (r: any): Folder => ({
 // ==================== 실시간 클라우드 동기화 서비스 ====================
 
 /**
- * 앱 시작 및 화면 활성화 시 양방향 완벽 동기화 (로컬 <-> Supabase 클라우드)
+ * 공용 단어/폴더 및 사용자별 개별 학습 진행도 동기화
+ * - 단어와 폴더는 모든 사용자가 공유
+ * - 학습 진행도(SRS)는 로그인한 사용자(userId)의 기록만 결합하여 로컬 DB에 반영
  */
-export const syncFromCloud = async (): Promise<{ wordsCount: number; foldersCount: number; isSuccess: boolean }> => {
+export const syncFromCloud = async (userId?: string): Promise<{ wordsCount: number; foldersCount: number; isSuccess: boolean }> => {
   try {
-    // 1. Supabase 폴더 동기화
+    // 1. Supabase 공용 폴더 동기화
     const { data: cloudFolders, error: folderErr } = await supabase.from('folders').select('*');
     if (folderErr) throw folderErr;
 
@@ -85,16 +85,85 @@ export const syncFromCloud = async (): Promise<{ wordsCount: number; foldersCoun
       }
     }
 
-    // 2. Supabase 단어 동기화
+    // 2. Supabase 공용 단어 동기화
     const { data: cloudWords, error: wordErr } = await supabase.from('words').select('*');
     if (wordErr) throw wordErr;
 
+    // 3. 사용자별 개별 학습 진행도 조회 (로그인된 경우)
+    const userProgressMap = new Map<string, any>();
+    if (userId) {
+      try {
+        const { data: progressData, error: progressErr } = await supabase
+          .from('user_word_progress')
+          .select('*')
+          .eq('user_id', userId);
+
+        if (!progressErr && progressData) {
+          progressData.forEach((p: any) => {
+            userProgressMap.set(p.word_id, p);
+          });
+        }
+      } catch (pErr) {
+        console.warn('user_word_progress 조회 실패 (로컬 모드 유지):', pErr);
+      }
+    }
+
+    // 4. 단어와 개인 학습 진행도 병합 (Merge)
     const localWords = await db.words.toArray();
-    if (cloudWords && cloudWords.length > 0) {
-      const convertedWords = cloudWords.map(rowToWord);
+    const localWordMap = new Map(localWords.map((w) => [w.id, w]));
+    const today = new Date().toISOString().split('T')[0];
+
+    const convertedWords: Word[] = (cloudWords || []).map((r: any) => {
+      const baseWord = rowToWord(r);
+
+      if (userId) {
+        // 로그인 회원: 클라우드 user_word_progress 테이블의 개인 기록 오버레이
+        const progress = userProgressMap.get(r.id);
+        if (progress) {
+          return {
+            ...baseWord,
+            srsLevel: progress.srs_level ?? 0,
+            consecutiveCorrect: progress.consecutive_correct ?? 0,
+            nextReviewDate: progress.next_review_date || today,
+            isWeak: progress.is_weak ?? false,
+            totalReviews: progress.total_reviews ?? 0,
+            lastReviewedAt: progress.last_reviewed_at || undefined,
+          };
+        } else {
+          // 해당 단어를 아직 공부하지 않은 경우 0단계 신규로 시작
+          return {
+            ...baseWord,
+            srsLevel: 0,
+            consecutiveCorrect: 0,
+            nextReviewDate: today,
+            isWeak: false,
+            totalReviews: 0,
+            lastReviewedAt: undefined,
+          };
+        }
+      } else {
+        // 비로그인(게스트): 로컬 브라우저(IndexedDB)에 저장된 기존 진행도 유지
+        const local = localWordMap.get(r.id);
+        if (local) {
+          return {
+            ...baseWord,
+            srsLevel: local.srsLevel,
+            consecutiveCorrect: local.consecutiveCorrect,
+            nextReviewDate: local.nextReviewDate,
+            isWeak: local.isWeak,
+            totalReviews: local.totalReviews,
+            lastReviewedAt: local.lastReviewedAt,
+          };
+        }
+        return baseWord;
+      }
+    });
+
+    if (convertedWords.length > 0) {
       await db.words.bulkPut(convertedWords);
     }
-    // 로컬에만 있고 클라우드에 아직 없는 단어가 있다면 즉시 클라우드로 업로드!
+
+    // 로컬에만 있고 클라우드에 아직 없는 단어가 있다면 클라우드에 업로드
     if (localWords.length > 0) {
       const cloudWordIds = new Set((cloudWords || []).map((w: any) => w.id));
       const wordsToUpload = localWords.filter((w) => !cloudWordIds.has(w.id));
@@ -103,9 +172,9 @@ export const syncFromCloud = async (): Promise<{ wordsCount: number; foldersCoun
       }
     }
 
-    console.log(`[Supabase Sync] 동기화 성공: 클라우드 단어 ${cloudWords?.length || 0}개, 폴더 ${cloudFolders?.length || 0}개`);
+    console.log(`[Supabase Sync] 동기화 성공: 공용 단어 ${convertedWords.length}개, 개인 학습 기록 ${userProgressMap.size}개`);
     return {
-      wordsCount: cloudWords ? cloudWords.length : 0,
+      wordsCount: convertedWords.length,
       foldersCount: cloudFolders ? cloudFolders.length : 0,
       isSuccess: true,
     };
@@ -116,7 +185,7 @@ export const syncFromCloud = async (): Promise<{ wordsCount: number; foldersCoun
 };
 
 /**
- * 실시간 변경 감지 리스너 (노트북에서 등록/수정/삭제 시 스마트폰에 실시간 푸시 반영)
+ * 실시간 변경 감지 리스너 (단어, 폴더, 개인 학습 진행도 감지)
  */
 export const initRealtimeSubscription = (onSyncNeeded: () => void) => {
   const channel = supabase
@@ -127,6 +196,9 @@ export const initRealtimeSubscription = (onSyncNeeded: () => void) => {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'folders' }, () => {
       onSyncNeeded();
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'user_word_progress' }, () => {
+      onSyncNeeded();
+    })
     .subscribe();
 
   return () => {
@@ -135,7 +207,61 @@ export const initRealtimeSubscription = (onSyncNeeded: () => void) => {
 };
 
 /**
- * 단일 단어를 Supabase에 저장/수정
+ * 사용자별 단어 학습 진행도 저장 (공용 words 테이블은 건드리지 않음)
+ */
+export const saveUserWordProgress = async (
+  userId: string,
+  wordId: string,
+  progress: {
+    srsLevel: number;
+    consecutiveCorrect: number;
+    nextReviewDate: string;
+    isWeak: boolean;
+    totalReviews: number;
+  }
+) => {
+  try {
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('user_word_progress').upsert(
+      {
+        user_id: userId,
+        word_id: wordId,
+        srs_level: progress.srsLevel,
+        consecutive_correct: progress.consecutiveCorrect,
+        next_review_date: progress.nextReviewDate,
+        is_weak: progress.isWeak,
+        total_reviews: progress.totalReviews,
+        last_reviewed_at: now,
+        updated_at: now,
+      },
+      { onConflict: 'user_id,word_id' }
+    );
+
+    if (error) console.error('사용자 학습 진행도 저장 실패:', error.message);
+  } catch (err) {
+    console.error('사용자 학습 진행도 저장 에러:', err);
+  }
+};
+
+/**
+ * 사용자별 개인 학습 진행도만 삭제 (공용 단어 및 타 사용자 기록 보존)
+ */
+export const resetUserStudyProgress = async (userId: string) => {
+  try {
+    const { error } = await supabase
+      .from('user_word_progress')
+      .delete()
+      .eq('user_id', userId);
+
+    if (error) console.error('사용자 학습 진행도 초기화 실패:', error.message);
+    else console.log('[Auth] 사용자 개별 학습 기록 초기화 완료');
+  } catch (err) {
+    console.error('사용자 학습 진행도 초기화 에러:', err);
+  }
+};
+
+/**
+ * 단일 단어를 Supabase 공용 라이브러리에 저장/수정
  */
 export const saveWordToCloud = async (word: Word) => {
   try {
@@ -148,7 +274,7 @@ export const saveWordToCloud = async (word: Word) => {
 };
 
 /**
- * 복수 단어 일괄 Supabase 저장
+ * 복수 단어 일괄 Supabase 공용 라이브러리에 저장
  */
 export const saveMultipleWordsToCloud = async (words: Word[]) => {
   if (!words || words.length === 0) return;
@@ -162,7 +288,7 @@ export const saveMultipleWordsToCloud = async (words: Word[]) => {
 };
 
 /**
- * Supabase에서 단어 삭제
+ * Supabase 공용 라이브러리에서 단어 삭제
  */
 export const deleteWordFromCloud = async (wordId: string) => {
   try {
@@ -174,7 +300,7 @@ export const deleteWordFromCloud = async (wordId: string) => {
 };
 
 /**
- * Supabase에서 복수 단어 일괄 삭제
+ * Supabase 공용 라이브러리에서 복수 단어 일괄 삭제
  */
 export const deleteMultipleWordsFromCloud = async (wordIds: string[]) => {
   if (!wordIds || wordIds.length === 0) return;
@@ -207,31 +333,6 @@ export const deleteFolderFromCloud = async (folderId: string) => {
     if (error) console.error('Supabase 폴더 삭제 실패:', error.message);
   } catch (err) {
     console.error('Supabase 폴더 삭제 네트워크 에러:', err);
-  }
-};
-
-/**
- * Supabase 클라우드에서 단어/폴더 데이터는 보존하고 학습 기록(SRS 레벨, 복습일, 취약 여부 등)만 0으로 초기화
- */
-export const resetAllStudyProgressInCloud = async () => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const { error } = await supabase
-      .from('words')
-      .update({
-        srs_level: 0,
-        consecutive_correct: 0,
-        next_review_date: today,
-        is_weak: false,
-        total_reviews: 0,
-        last_reviewed_at: null,
-      })
-      .neq('id', '');
-
-    if (error) console.error('Supabase 학습 기록 초기화 실패:', error.message);
-    else console.log('[Supabase Sync] 클라우드 학습 기록 초기화 완료');
-  } catch (err) {
-    console.error('Supabase 학습 기록 초기화 에러:', err);
   }
 };
 
