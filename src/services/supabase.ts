@@ -209,3 +209,29 @@ export const deleteFolderFromCloud = async (folderId: string) => {
     console.error('Supabase 폴더 삭제 네트워크 에러:', err);
   }
 };
+
+/**
+ * Supabase 클라우드에서 단어/폴더 데이터는 보존하고 학습 기록(SRS 레벨, 복습일, 취약 여부 등)만 0으로 초기화
+ */
+export const resetAllStudyProgressInCloud = async () => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { error } = await supabase
+      .from('words')
+      .update({
+        srs_level: 0,
+        consecutive_correct: 0,
+        next_review_date: today,
+        is_weak: false,
+        total_reviews: 0,
+        last_reviewed_at: null,
+      })
+      .neq('id', '');
+
+    if (error) console.error('Supabase 학습 기록 초기화 실패:', error.message);
+    else console.log('[Supabase Sync] 클라우드 학습 기록 초기화 완료');
+  } catch (err) {
+    console.error('Supabase 학습 기록 초기화 에러:', err);
+  }
+};
+

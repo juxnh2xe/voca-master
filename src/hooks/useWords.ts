@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { Word, TabType } from '../types/voca';
 import { isDueToday, calculateSrsUpdate, EvaluationType } from '../services/srs';
-import { saveWordToCloud, saveMultipleWordsToCloud, deleteWordFromCloud, deleteMultipleWordsFromCloud } from '../services/supabase';
+import { saveWordToCloud, saveMultipleWordsToCloud, deleteWordFromCloud, deleteMultipleWordsFromCloud, resetAllStudyProgressInCloud } from '../services/supabase';
 
 export interface SetRangeGroup {
   label: string; // "#001 ~ #005"
@@ -265,6 +265,26 @@ export const useWords = () => {
     if (updated) saveWordToCloud(updated);
   };
 
+  // 5. 단어 데이터는 보존하고 학습 진행 기록만 0으로 초기화
+  const resetAllStudyProgress = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    const now = new Date().toISOString();
+    const words = await db.words.toArray();
+    const resetWords: Word[] = words.map((w) => ({
+      ...w,
+      srsLevel: 0,
+      consecutiveCorrect: 0,
+      nextReviewDate: today,
+      isWeak: false,
+      totalReviews: 0,
+      totalCorrect: 0,
+      lastReviewedAt: undefined,
+      updatedAt: now,
+    }));
+    await db.words.bulkPut(resetWords);
+    await resetAllStudyProgressInCloud();
+  };
+
   return {
     allWords,
     sortWordsByCluster,
@@ -279,5 +299,6 @@ export const useWords = () => {
     deleteWord,
     deleteMultipleWords,
     recordEvaluation,
+    resetAllStudyProgress,
   };
 };

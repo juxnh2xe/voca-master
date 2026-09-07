@@ -1,14 +1,15 @@
 import React from 'react';
-import { BarChart3, Award, Flame, AlertCircle, CheckCircle, Clock, BookOpen, Sparkles, TrendingUp } from 'lucide-react';
+import { BarChart3, Award, Flame, AlertCircle, CheckCircle, Clock, BookOpen, Sparkles, TrendingUp, RotateCcw } from 'lucide-react';
 import { Word } from '../../types/voca';
 import { isDueToday, getTodayStr } from '../../services/srs';
 
 interface StatsDashboardProps {
   words: Word[];
   onStartWeakReview?: (weakWords: Word[]) => void;
+  onResetStudyProgress?: () => Promise<void>;
 }
 
-export const StatsDashboard: React.FC<StatsDashboardProps> = ({ words, onStartWeakReview }) => {
+export const StatsDashboard: React.FC<StatsDashboardProps> = ({ words, onStartWeakReview, onResetStudyProgress }) => {
   const total = words.length;
   const today = getTodayStr();
 
@@ -209,6 +210,38 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({ words, onStartWe
           </div>
         </div>
       </div>
+
+      {/* 4. 학습 기록 데이터 관리 섹션 */}
+      {onResetStudyProgress && (
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <RotateCcw className="w-4 h-4 text-slate-500" />
+                <span>내 학습 데이터만 초기화</span>
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                등록된 단어와 단어장은 100% 안전하게 유지되며, SRS 레벨, 복습 횟수, 취약 표시 등 <strong>내 학습 진도 기록만 0으로 리셋</strong>합니다.
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                if (
+                  confirm(
+                    '정말로 학습 진행 데이터를 초기화하시겠습니까?\n\n- 등록된 단어와 단어장은 그대로 보존됩니다.\n- SRS 단계, 복습일, 취약 표시 등 내 학습 기록만 처음(0단계)으로 돌아갑니다.'
+                  )
+                ) {
+                  await onResetStudyProgress();
+                  alert('학습 진행 데이터가 깨끗하게 초기화되었습니다. 단어들은 그대로 보존됩니다.');
+                }
+              }}
+              className="shrink-0 px-4 py-2.5 rounded-xl border border-slate-300 hover:border-rose-300 hover:bg-rose-50 text-slate-700 hover:text-rose-600 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+            >
+              학습 데이터 초기화
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -72,6 +72,7 @@ export const App: React.FC = () => {
     deleteWord,
     deleteMultipleWords,
     recordEvaluation,
+    resetAllStudyProgress,
   } = useWords();
 
   const {
@@ -596,7 +597,10 @@ export const App: React.FC = () => {
 
         {/* ======================= TAB 4: 대시보드 ======================= */}
         {activeTab === 'dashboard' && (
-          <StatsDashboard words={allWords} />
+          <StatsDashboard
+            words={allWords}
+            onResetStudyProgress={resetAllStudyProgress}
+          />
         )}
       </main>
     </div>
