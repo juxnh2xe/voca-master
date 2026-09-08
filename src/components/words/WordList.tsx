@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Sparkles, Layers, Folder as FolderIcon, Edit3, Trash2, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react';
+import { Search, Sparkles, Layers, Folder as FolderIcon, Edit3, Trash2, ChevronDown, ChevronUp, CheckSquare, Square, RefreshCw } from 'lucide-react';
 import { Word, Folder, TabType } from '../../types/voca';
 import { renderHighlightedSentence } from '../study/Flashcard';
 import { WordEditModal } from './WordEditModal';
@@ -15,6 +15,7 @@ interface WordListProps {
   onUpdateWord: (id: string, changes: Partial<Word>) => Promise<void>;
   onDeleteWord: (id: string) => Promise<void>;
   onDeleteMultipleWords: (ids: string[]) => Promise<void>;
+  onSync?: () => Promise<any> | void;
 }
 
 export const WordList: React.FC<WordListProps> = ({
@@ -28,7 +29,9 @@ export const WordList: React.FC<WordListProps> = ({
   onUpdateWord,
   onDeleteWord,
   onDeleteMultipleWords,
+  onSync,
 }) => {
+  const [isSyncing, setIsSyncing] = useState(false);
   const [editingWord, setEditingWord] = useState<Word | null>(null);
   const [expandedWordIds, setExpandedWordIds] = useState<Set<string>>(new Set());
   const [selectedWordIds, setSelectedWordIds] = useState<Set<string>>(new Set());
@@ -192,12 +195,34 @@ export const WordList: React.FC<WordListProps> = ({
       {/* 단어 목록 결과 */}
       <div className="space-y-3">
         {words.length === 0 ? (
-          <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-2">
+          <div className="bg-white p-10 sm:p-12 rounded-3xl border border-slate-200 text-center space-y-3">
             <Sparkles className="w-8 h-8 text-slate-300 mx-auto" />
-            <p className="text-sm font-bold text-slate-700">해당 조건의 단어가 없습니다</p>
-            <p className="text-xs text-slate-400">
-              다른 탭을 선택하거나 검색어를 변경해 보세요.
+            <p className="text-sm font-bold text-slate-700">
+              {totalWordCount === 0 ? '단어 목록을 불러오는 중이거나 비어 있습니다' : '해당 조건의 단어가 없습니다'}
             </p>
+            <p className="text-xs text-slate-400">
+              {totalWordCount === 0
+                ? '클라우드와 연결하여 최신 단어 데이터를 가져옵니다.'
+                : '다른 탭을 선택하거나 검색어를 변경해 보세요.'}
+            </p>
+            {totalWordCount === 0 && onSync && (
+              <button
+                onClick={async () => {
+                  if (isSyncing) return;
+                  setIsSyncing(true);
+                  try {
+                    await onSync();
+                  } finally {
+                    setIsSyncing(false);
+                  }
+                }}
+                disabled={isSyncing}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer mt-2"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? '클라우드에서 불러오는 중...' : '클라우드 단어 동기화 (불러오기)'}</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3">

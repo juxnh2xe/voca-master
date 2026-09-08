@@ -1,5 +1,5 @@
 // VocaMaster Service Worker for Full Offline Support
-const CACHE_NAME = 'vocamaster-cache-v1';
+const CACHE_NAME = 'vocamaster-cache-v2';
 
 // 핵심 기본 정적 자원 목록
 const PRECACHE_ASSETS = [

@@ -28,6 +28,8 @@ export class VocaDatabase extends Dexie {
       folders: 'id, name, parentId, createdAt',
     });
     this.version(2).stores({
+      words: 'id, word, setId, folderId, srsLevel, nextReviewDate, isWeak, createdAt',
+      folders: 'id, name, parentId, createdAt',
       syncQueue: '++id, userId, wordId, timestamp',
     });
   }
@@ -35,15 +37,7 @@ export class VocaDatabase extends Dexie {
 
 export const db = new VocaDatabase();
 
-// 기존 샘플/예시 데이터 제거 및 클린 상태 유지
+// 하위 호환성을 위해 유지하되, 전체 데이터를 임의 삭제하지 않도록 안전 처리
 export const cleanSampleDataIfPresent = async () => {
-  try {
-    const sampleWord = await db.words.where('id').startsWith('w_att').first();
-    if (sampleWord) {
-      await db.words.clear();
-      await db.folders.clear();
-    }
-  } catch {
-    // 무시
-  }
+  // no-op: Supabase 클라우드 동기화가 공용 단어 무결성을 관리함
 };
